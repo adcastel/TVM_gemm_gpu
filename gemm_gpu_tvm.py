@@ -202,8 +202,8 @@ def test_gemm_gpu(M, N, K, dt, check):
             for step in s_values:
                 try:
                     gpu_gemm = schedule_gemm(A, B, C,tgt_gpu, elements_per_thread, num_thread, step)
-                    #if check_gemm(M,N,K,gpu_gemm) == False:
-                    #    print("ERROR");
+                    if check == True and check_gemm(M,N,K,gpu_gemm) == False:
+                        print("ERROR");
     
                     time = perf_eval(M, N, K, dt, gpu_gemm, tgt_gpu)
                     if time <= best_time:
