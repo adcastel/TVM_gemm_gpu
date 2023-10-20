@@ -24,6 +24,7 @@ if __name__ == '__main__':
     parser.add_argument('--dtA', type=str, default="float32", help='data type A')
     parser.add_argument('--dtB', type=str, default="float32",  help='data type B')
     parser.add_argument('--dtC', type=str, default="float32", help='data type C')
+    parser.add_argument('--arch', type=str, default="cuda", help='Device compute capability')
     parser.add_argument('--qnn', action=argparse.BooleanOptionalAction, default=False, help='quantize')
     parser.add_argument('--check', action=argparse.BooleanOptionalAction, default=False, help='check?')
     args = parser.parse_args()
