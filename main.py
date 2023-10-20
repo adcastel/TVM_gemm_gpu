@@ -10,7 +10,7 @@ from gemm_gpu_tvm import *
 def main(args):
     
     print( args)
-    test_gemm_gpu(args.M, args.N, args.K, args.batch,args.dtA, args.dtB, args.dtC, args.qnn, args.check)
+    test_gemm_gpu(args.M, args.N, args.K, args.batch,args.dtA, args.dtB, args.dtC, args.qnn, args.check, args.arch)
 
 
 

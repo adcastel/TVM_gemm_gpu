@@ -391,7 +391,12 @@ def test_gemm_gpu(M, N, K, batch, dtA, dtB, dtC, qnn, check, device="cuda"):
 
     M = M * batch
 
-    tgt_gpu = tvm.target.Target(target=device, host="llvm")
+    if device == "cuda":
+        tgt_gpu = tvm.target.Target(target=device, host="llvm")
+    else:
+        tgt_gpu = tvm.target.cuda(model='unknown', arch=device, options=None)
+    
+    
     dev = tvm.device(tgt_gpu.kind.name, 0)
 
     best_time = float('inf')
