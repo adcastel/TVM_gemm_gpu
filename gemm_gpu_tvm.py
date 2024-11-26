@@ -229,16 +229,15 @@ def schedule_gemm_v4(A, B, C, tgt_gpu, elements_per_thread, num_thread, vt, step
     
     return func
 
-def schedule_gemm(A, B, C, batch, tgt_gpu, elements_per_thread, num_thread, vt, step):
+def schedule_gemm(A, B, C, tgt_gpu, elements_per_thread, num_thread, vt, step):
     
     s = te.create_schedule(C.op)
-    """
-    if batch != 1:
-        AA = s.cache_read(A, "shared", [C])
-        BB = s.cache_read(B, "shared", [C])
-    #AL = s.cache_read(AA, "local", [C])
-    #BL = s.cache_read(BB, "local", [C])
-    """
+    
+    AA = s.cache_read(A, "shared", [C])
+    BB = s.cache_read(B, "shared", [C])
+    AL = s.cache_read(AA, "local", [C])
+    BL = s.cache_read(BB, "local", [C])
+    
     CL = s.cache_write(C, "local")
    
     # Establecemos las opciones de tiling
@@ -291,43 +290,42 @@ def schedule_gemm(A, B, C, batch, tgt_gpu, elements_per_thread, num_thread, vt, 
     xo, ni = s[CL].split(ni, factor=4)
     s[CL].unroll(xo)
     s[CL].vectorize(ni)
-    """
-    if batch != 1:
-        # Unimos el computo a las variables de iteracion
-        s[AA].compute_at(s[CL], rko)
-        s[BB].compute_at(s[CL], rko)
-        #s[AL].compute_at(s[CL], rki)
-        #s[BL].compute_at(s[CL], rki)
+    
+    # Unimos el computo a las variables de iteracion
+    s[AA].compute_at(s[CL], rko)
+    s[BB].compute_at(s[CL], rko)
+    s[AL].compute_at(s[CL], rki)
+    s[BL].compute_at(s[CL], rki)
 
 
-        # Schedule para la carga en la memoria compartida AA
-        mi, ni = s[AA].op.axis
-        ty, mi = s[AA].split(mi, nparts=num_thread)
-        tx, ni = s[AA].split(ni, nparts=num_thread)
-        _, ni = s[AA].split(ni, factor=4)
-        s[AA].reorder(ty, tx, mi, ni)
-        s[AA].bind(ty, thread_y)
-        s[AA].bind(tx, thread_x)
-        s[AA].vectorize(ni)  # vectorize memory load
+    # Schedule para la carga en la memoria compartida AA
+    mi, ni = s[AA].op.axis
+    ty, mi = s[AA].split(mi, nparts=num_thread)
+    tx, ni = s[AA].split(ni, nparts=num_thread)
+    _, ni = s[AA].split(ni, factor=4)
+    s[AA].reorder(ty, tx, mi, ni)
+    s[AA].bind(ty, thread_y)
+    s[AA].bind(tx, thread_x)
+    s[AA].vectorize(ni)  # vectorize memory load
 #
-        # Schedule para la carga en la memoria compartida BB
-        mi, ni = s[BB].op.axis
-        ty, mi = s[BB].split(mi, nparts=num_thread)
-        tx, ni = s[BB].split(ni, nparts=num_thread)
-        _, ni = s[BB].split(ni, factor=4)
-        s[BB].reorder(ty, tx, mi, ni)
-        s[BB].bind(ty, thread_y)
-        s[BB].bind(tx, thread_x)
-        s[BB].vectorize(ni)  # vectorize memory load
-    """
+    # Schedule para la carga en la memoria compartida BB
+    mi, ni = s[BB].op.axis
+    ty, mi = s[BB].split(mi, nparts=num_thread)
+    tx, ni = s[BB].split(ni, nparts=num_thread)
+    _, ni = s[BB].split(ni, factor=4)
+    s[BB].reorder(ty, tx, mi, ni)
+    s[BB].bind(ty, thread_y)
+    s[BB].bind(tx, thread_x)
+    s[BB].vectorize(ni)  # vectorize memory load
+    
     
     # Optimizamos AL y BL
-    #mi, ni = s[AL].op.axis
-    #xo, mi = s[AL].split(mi, factor=4)
-    #s[AL].unroll(xo)
-    #s[AL].vectorize(mi)
-    #mi, ni = s[BL].op.axis
-    #s[BL].vectorize(ni)
+    mi, ni = s[AL].op.axis
+    xo, mi = s[AL].split(mi, factor=4)
+    s[AL].unroll(xo)
+    s[AL].vectorize(mi)
+    mi, ni = s[BL].op.axis
+    s[BL].vectorize(ni)
     
     with tvm.transform.PassContext(config={"tir.LoopPartition": {"partition_const_loop": True}}):
 
@@ -387,16 +385,15 @@ def check_gemm(M, N, K, gpu_gemm, dtA, dtB, dtC, tgt_gpu):
     return tvm.testing.assert_allclose(d_c.numpy(), answer, rtol=1e-5)
 
 
-def test_gemm_gpu(M, N, K, batch, dtA, dtB, dtC, qnn, check, device="cuda"):
+def test_gemm_gpu(M, N, K, dtA, dtB, dtC, qnn, check, device="cuda"):
 
-    M = M * batch
+    #if device == "cuda":
+    #    tgt_gpu = tvm.target.Target(target=device, host="llvm")
+    #else:
+    #    tgt_gpu = tvm.target.cuda(model='unknown', arch=device, options=None)
+    
+    tgt_gpu = tvm.target.cuda(model='a100', arch="sm_80")
 
-    if device == "cuda":
-        tgt_gpu = tvm.target.Target(target=device, host="llvm")
-    else:
-        tgt_gpu = tvm.target.cuda(model='unknown', arch=device, options=None)
-    
-    
     dev = tvm.device(tgt_gpu.kind.name, 0)
 
     best_time = float('inf')
@@ -424,13 +421,13 @@ def test_gemm_gpu(M, N, K, batch, dtA, dtB, dtC, qnn, check, device="cuda"):
             for vt in vt_values:
                 for step in s_values:
                     if vt > elements_per_thread:
-                        print("%i, %i, %i %i is not suitable for %i %i %i" % (num_thread,elements_per_thread, vt, step, M, N, K))
+                        #print("%i, %i, %i %i is not suitable for %i %i %i" % (num_thread,elements_per_thread, vt, step, M, N, K))
                         continue
                     
                     try:
-                        gpu_gemm = schedule_gemm(A, B, C,batch,tgt_gpu, elements_per_thread, num_thread, vt, step)
+                        gpu_gemm = schedule_gemm(A, B, C,tgt_gpu, elements_per_thread, num_thread, vt, step)
                     except:
-                        print("%i, %i, %i %i is not suitable for %i %i %i" % (num_thread,elements_per_thread, vt, step, M, N, K))
+                        #print("%i, %i, %i %i is not suitable for %i %i %i" % (num_thread,elements_per_thread, vt, step, M, N, K))
                         continue 
                     try:
                         if check == True and make_check == 0:
@@ -438,7 +435,7 @@ def test_gemm_gpu(M, N, K, batch, dtA, dtB, dtC, qnn, check, device="cuda"):
                             if check_gemm(M,N,K,gpu_gemm, dtA, dtB, dtC, tgt_gpu) == False:
                                 print("ERROR");
                     except:
-                        print("ERROR during check\n")
+                        #print("ERROR during check\n")
                         break
                     
                     try:

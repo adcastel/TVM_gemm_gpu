@@ -1,13 +1,43 @@
+from time import time
+from models import *
+import os
 import sys
 import argparse
+import pycuda.autoinit
+import pycuda.gpuarray as gpuarray
+import pycuda.driver as drv
+import numpy as np
+
+import skcuda.linalg as culinalg
+import skcuda.misc as cumisc
 
 
-from gemm_gpu_tvm import *
-from autogemm_gpu_tvm import *
-#from quantize import *
-from models import *
+def gemm_culib(M,N,K,dtA,dtB,dtC,qnn,check,arch):
+    
+    culinalg.init()
 
+    A = np.random.randn(M,K)
+    B = np.random.randn(K,N)
+    C = np.random.randn(M,N)
+    
+    A_gpu = gpuarray.to_gpu(A)
+    B_gpu = gpuarray.to_gpu(B)
+    C_gpu = gpuarray.to_gpu(C)
+    
+    #C_d = cublas.gemm("N", "N", 1.0, A_d, B_d)
+    C_gpu = culinalg.dot(A_gpu, B_gpu)
+    repeticiones = 10000
 
+    start = time()
+    for _ in range (repeticiones):
+        C_gpu = culinalg.dot(A_gpu, B_gpu)
+    end = time()
+    tt = (end-start)/repeticiones
+    gflops=2.0*M*N*K/tt/1.0e9
+    print(f"{M} {N} {K} {gflops}")
+    del A_gpu
+    del B_gpu
+    del C_gpu
 def main(args):
     
     print( args)
@@ -21,14 +51,12 @@ def main(args):
         MNK = googlenet()
     else:
         MNK = test()
+    
+    os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+    
     for M, N, K in MNK:
         M = M * args.batch
-        if(args.auto == False):
-            test_gemm_gpu(M, N, K, args.dtA, args.dtB, args.dtC, args.qnn, args.check, args.arch)
-        else:
-            auto_gemm_gpu(M, N, K, args.dtA, args.dtB, args.dtC, args.qnn, args.check, args.arch)
-
-
+        gemm_culib(M, N, K, args.dtA, args.dtB, args.dtC, args.qnn, args.check, args.arch)
 
 if __name__ == '__main__':
     
@@ -46,9 +74,10 @@ if __name__ == '__main__':
     parser.add_argument('--check', action=argparse.BooleanOptionalAction, default=False, help='check?')
     parser.add_argument('--auto', action=argparse.BooleanOptionalAction, default=False, help='check?')
     args = parser.parse_args()
-
-
+    
+    
     main(args)
+
 
 
 

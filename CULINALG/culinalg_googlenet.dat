@@ -1,0 +1,4 @@
+Namespace(model='googlenet', batch=128, dtA='float32', dtB='float32', dtC='float32', arch='cuda', qnn=False, check=False, auto=True)
+6422528 192 27 261.59702582633633
+6422528 64 192 1845.617996105188
+6422528 96 192 1841.1069041583112
